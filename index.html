@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schüler-Ranking</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .hidden {
+            display: none;
+        }
+        .btn {
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .comparison-container {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .comparison-btn {
+            flex: 1;
+            height: 100px;
+            font-size: 20px;
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .comparison-btn:hover {
+            background-color: #0056b3;
+        }
+        .progress {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        select {
+            padding: 8px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Schüler-Ranking</h1>
+        
+        <div id="classManagement">
+            <h2>Klassenverwaltung</h2>
+            <select id="classSelect" onchange="selectClass()">
+                <option value="">Klasse auswählen...</option>
+            </select>
+            <button class="btn" onclick="showNewClassDialog()">Neue Klasse</button>
+            <button class="btn" onclick="deleteCurrentClass()">Klasse löschen</button>
+        </div>
+
+        <div id="newClassDialog" class="hidden">
+            <h3>Neue Klasse erstellen</h3>
+            <input type="text" id="newClassName" placeholder="Klassenname">
+            <textarea id="studentsList" placeholder="Schülernamen (einer pro Zeile)"></textarea>
+            <button class="btn" onclick="createNewClass()">Erstellen</button>
+            <button class="btn" onclick="hideNewClassDialog()">Abbrechen</button>
+        </div>
+
+        <div id="studentManagement" class="hidden">
+            <h2>Schülerverwaltung</h2>
+            <button class="btn" onclick="showAddStudentDialog()">Schüler hinzufügen</button>
+            <div id="addStudentDialog" class="hidden">
+                <textarea id="newStudents" placeholder="Neue Schüler (einer pro Zeile)"></textarea>
+                <button class="btn" onclick="addNewStudents()">Hinzufügen</button>
+                <button class="btn" onclick="hideAddStudentDialog()">Abbrechen</button>
+            </div>
+        </div>
+
+        <div id="comparisonSection" class="hidden">
+            <h2>Paarvergleich</h2>
+            <div class="progress">
+                <div>Fortschritt: <span id="progressText">0%</span></div>
+                <div><span id="remainingComparisons"></span></div>
+            </div>
+            <p>Welcher Schüler hat die bessere Leistung gezeigt?</p>
+            <div class="comparison-container">
+                <button id="student1" class="comparison-btn" onclick="compareStudents(0)"></button>
+                <button id="student2" class="comparison-btn" onclick="compareStudents(1)"></button>
+            </div>
+        </div>
+
+        <div id="resultSection" class="hidden">
+            <h2>Aktuelles Ranking</h2>
+            <table id="rankingTable">
+                <thead>
+                    <tr>
+                        <th>Rang</th>
+                        <th>Name</th>
+                        <th>Score</th>
+                        <th>Konfidenz</th>
+                        <th>Aktion</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Datenstruktur
+        let state = {
+            classes: {},
+            currentClass: null,
+            currentComparison: null,
+            comparisons: [],
+        };
+
+        // Initialisierung
+        function init() {
+            loadState();
+            updateClassSelect();
+        }
+
+        // Speichern/Laden
+        function loadState() {
+            const savedState = localStorage.getItem('rankingAppState');
+            if (savedState) {
+                state = JSON.parse(savedState);
+            }
+        }
+
+        function saveState() {
+            localStorage.setItem('rankingAppState', JSON.stringify(state));
+        }
+
+        // Klassenverwaltung
+        function updateClassSelect() {
+            const select = document.getElementById('classSelect');
+            select.innerHTML = '<option value="">Klasse auswählen...</option>';
+            Object.keys(state.classes).forEach(className => {
+                const option = document.createElement('option');
+                option.value = className;
+                option.textContent = className;
+                if (state.currentClass === className) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+
+        function showNewClassDialog() {
+            document.getElementById('newClassDialog').classList.remove('hidden');
+        }
+
+        function hideNewClassDialog() {
+            document.getElementById('newClassDialog').classList.add('hidden');
+            document.getElementById('newClassName').value = '';
+            document.getElementById('studentsList').value = '';
+        }
+
+        function createNewClass() {
+            const className = document.getElementById('newClassName').value.trim();
+            const studentsText = document.getElementById('studentsList').value.trim();
+            
+            if (!className) {
+                alert('Bitte geben Sie einen Klassennamen ein.');
+                return;
+            }
+
+            const students = studentsText.split('\n')
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
+
+            if (students.length < 2) {
+                alert('Bitte geben Sie mindestens zwei Schüler ein.');
+                return;
+            }
+
+            state.classes[className] = {
+                students: students,
+                comparisons: {},
+                scores: {}
+            };
+
+            saveState();
+            updateClassSelect();
+            hideNewClassDialog();
+            selectClass(className);
+        }
+
+        function deleteCurrentClass() {
+            if (!state.currentClass) return;
+            
+            if (confirm(`Möchten Sie die Klasse "${state.currentClass}" wirklich löschen?`)) {
+                delete state.classes[state.currentClass];
+                state.currentClass = null;
+                saveState();
+                updateClassSelect();
+                hideAllSections();
+            }
+        }
+
+        // Schülerverwaltung
+        function showAddStudentDialog() {
+            document.getElementById('addStudentDialog').classList.remove('hidden');
+        }
+
+        function hideAddStudentDialog() {
+            document.getElementById('addStudentDialog').classList.add('hidden');
+            document.getElementById('newStudents').value = '';
+        }
+
+        function addNewStudents() {
+            if (!state.currentClass) return;
+
+            const newStudentsText = document.getElementById('newStudents').value.trim();
+            const newStudents = newStudentsText.split('\n')
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
+
+            if (newStudents.length === 0) {
+                alert('Bitte geben Sie mindestens einen Schüler ein.');
+                return;
+            }
+
+            state.classes[state.currentClass].students = [
+                ...state.classes[state.currentClass].students,
+                ...newStudents
+            ];
+
+            saveState();
+            hideAddStudentDialog();
+            updateUI();
+        }
+
+        function deleteStudent(studentName) {
+            if (!state.currentClass) return;
+            
+            if (confirm(`Möchten Sie den Schüler "${studentName}" wirklich löschen?`)) {
+                const classData = state.classes[state.currentClass];
+                classData.students = classData.students.filter(s => s !== studentName);
+                
+                // Lösche alle Vergleiche mit diesem Schüler
+                Object.keys(classData.comparisons).forEach(key => {
+                    if (key.includes(studentName)) {
+                        delete classData.comparisons[key];
+                    }
+                });
+
+                delete classData.scores[studentName];
+                
+                saveState();
+                updateUI();
+            }
+        }
+
+        // Vergleiche und Ranking
+        function selectClass(className) {
+            const selectedClass = className || document.getElementById('classSelect').value;
+            state.currentClass = selectedClass;
+            saveState();
+            
+            if (selectedClass) {
+                document.getElementById('studentManagement').classList.remove('hidden');
+                document.getElementById('comparisonSection').classList.remove('hidden');
+                document.getElementById('resultSection').classList.remove('hidden');
+                updateUI();
+            } else {
+                hideAllSections();
+            }
+        }
+
+        function hideAllSections() {
+            document.getElementById('studentManagement').classList.add('hidden');
+            document.getElementById('comparisonSection').classList.add('hidden');
+            document.getElementById('resultSection').classList.add('hidden');
+        }
+		
+		function getNextComparison() {
+		    if (!state.currentClass) return null;
+
+		    const classData = state.classes[state.currentClass];
+		    const students = classData.students;
+		    const comparisons = classData.comparisons || {};
+		    const scores = classData.scores || {};
+
+		    // Finde alle möglichen Paare mit ihrer Priorität
+		    let pairs = [];
+		    for (let i = 0; i < students.length; i++) {
+		        for (let j = i + 1; j < students.length; j++) {
+		            const student1 = students[i];
+		            const student2 = students[j];
+		            const key = `${student1}_${student2}`;
+		            const reverseKey = `${student2}_${student1}`;
+            
+		            // Zähle bisherige Vergleiche
+		            const compResults = [...(comparisons[key] || []), 
+		                               ...(comparisons[reverseKey] || []).map(r => 1 - r)];
+		            const compCount = compResults.length;
+            
+		            // Berechne Priorität für dieses Paar
+		            let priority = 0;
+            
+		            // 1. Grundpriorität: Weniger verglichene Paare bevorzugen
+		            priority += 100 / (compCount + 1);
+            
+		            // 2. Knappe Ergebnisse benötigen mehr Vergleiche
+		            if (compCount > 0) {
+		                const wins = compResults.filter(r => r === 1).length;
+		                const winRate = wins / compCount;
+		                const closeness = 4 * Math.abs(winRate - 0.5); // 0 für 50:50, 2 für 100:0
+		                priority += 50 * (1 - closeness);
+		            }
+            
+		            // 3. Benachbarte Ränge im aktuellen Ranking bevorzugen
+		            if (Object.keys(scores).length > 0) {
+		                const scoreDiff = Math.abs(scores[student1] - scores[student2]);
+		                priority += 30 * (1 - scoreDiff);
+		            }
+
+		            pairs.push({
+		                students: [student1, student2],
+		                count: compCount,
+		                priority: priority
+		            });
+		        }
+		    }
+
+		    // Sortiere nach Priorität
+		    pairs.sort((a, b) => b.priority - a.priority);
+
+		    // Wähle aus den Top 3 Paaren zufällig aus
+		    const topPairs = pairs.slice(0, 3);
+		    const selectedPair = topPairs[Math.floor(Math.random() * topPairs.length)];
+    
+		    // Mische die Reihenfolge der Schüler
+		    if (Math.random() < 0.5) {
+		        selectedPair.students.reverse();
+		    }
+
+		    return selectedPair.students;
+		}
+		
+
+        function updateComparisonUI() {
+            const comparison = getNextComparison();
+            if (!comparison) return;
+
+            state.currentComparison = comparison;
+            document.getElementById('student1').textContent = comparison[0];
+            document.getElementById('student2').textContent = comparison[1];
+
+            updateProgress();
+        }
+
+        function compareStudents(winner) {
+            if (!state.currentComparison) return;
+
+            const [student1, student2] = state.currentComparison;
+            const key = `${student1}_${student2}`;
+            
+            const classData = state.classes[state.currentClass];
+            classData.comparisons = classData.comparisons || {};
+            classData.comparisons[key] = classData.comparisons[key] || [];
+            
+            // Speichere das Ergebnis (1 für student1 gewonnen, 0 für student2 gewonnen)
+            classData.comparisons[key].push(winner === 0 ? 1 : 0);
+
+            updateRankings();
+            saveState();
+            updateComparisonUI();
+        }
+
+		function updateProgress() {
+		    const classData = state.classes[state.currentClass];
+		    const students = classData.students;
+		    const comparisons = classData.comparisons || {};
+    
+		    // Gesamtzahl möglicher Paare: n * (n-1) / 2
+		    const n = students.length;
+		    const totalPossiblePairs = (n * (n-1)) / 2;
+    
+		    // Zähle aktuelle Vergleiche pro Paar
+		    const pairComparisons = {};
+		    Object.entries(comparisons).forEach(([pair, results]) => {
+		        pairComparisons[pair] = results.length;
+		        // Berücksichtige auch die umgekehrte Reihenfolge
+		        const [student1, student2] = pair.split('_');
+		        const reversePair = `${student2}_${student1}`;
+		        pairComparisons[reversePair] = results.length;
+		    });
+    
+		    // Zähle abgeschlossene Vergleiche
+		    let completedComparisons = 0;
+		    for (let i = 0; i < students.length; i++) {
+		        for (let j = i + 1; j < students.length; j++) {
+		            const pair = `${students[i]}_${students[j]}`;
+		            const reversePair = `${students[j]}_${students[i]}`;
+		            const pairCount = (pairComparisons[pair] || 0) + (pairComparisons[reversePair] || 0);
+		            completedComparisons += pairCount;
+		        }
+		    }
+
+		    // Ziel: 1 (2) Vergleiche pro Paar im Durchschnitt
+		    const targetComparisons = totalPossiblePairs; // * 2;
+    
+		    // Berechne Fortschritt (0-100%)
+		    const progress = Math.round((completedComparisons / targetComparisons) * 100);
+    
+		    // Update UI
+		    document.getElementById('progressText').textContent = `${progress}%`;
+		    document.getElementById('remainingComparisons').textContent = 
+		        `${completedComparisons} von ${targetComparisons} Vergleichen`;
+
+		    // Detaillierte Statistik für Entwicklungszwecke
+		    console.log({
+		        'Anzahl Schüler': n,
+		        'Mögliche Paare': totalPossiblePairs,
+		        'Ziel Vergleiche': targetComparisons,
+		        'Durchgeführte Vergleiche': completedComparisons,
+		        'Fortschritt': progress + '%'
+		    });
+		}
+		
+        function updateRankings() {
+            if (!state.currentClass) return;
+
+            const classData = state.classes[state.currentClass];
+            const students = classData.students;
+            const comparisons = classData.comparisons || {};
+
+            // Bradley-Terry-Modell Implementation
+            const scores = {};
+            const iterations = 100;
+            const epsilon = 1e-10;
+
+            // Initialisiere Scores
+            students.forEach(student => {
+                scores[student] = 1.0;
+            });
+
+            // Iterative Berechnung
+            for (let iter = 0; iter < iterations; iter++) {
+                const newScores = {};
+                const denominator = {};
+
+                // Initialisiere Zähler und Nenner
+                students.forEach(student => {
+                    newScores[student] = 0;
+                    denominator[student] = 0;
+                });
+
+                // Berechne neue Scores
+                Object.entries(comparisons).forEach(([key, results]) => {
+                    const [student1, student2] = key.split('_');
+                    results.forEach(result => {
+                        const prob1 = scores[student1] / (scores[student1] + scores[student2]);
+                        const prob2 = scores[student2] / (scores[student1] + scores[student2]);
+
+                        if (result === 1) {
+                            newScores[student1] += 1 / prob1;
+                            denominator[student1] += 1;
+                            denominator[student2] += 1;
+                        } else {
+                            newScores[student2] += 1 / prob2;
+                            denominator[student1] += 1;
+                            denominator[student2] += 1;
+                        }
+                    });
+                });
+
+                // Normalisiere Scores
+                students.forEach(student => {
+                    if (denominator[student] > 0) {
+                        newScores[student] = newScores[student] / denominator[student];
+                    } else {
+                        newScores[student] = scores[student];
+                    }
+                });
+
+                // Normalisiere auf Summe 1
+                const totalScore = Object.values(newScores).reduce((a, b) => a + b, 0);
+                students.forEach(student => {
+                    newScores[student] = newScores[student] / totalScore;
+                });
+
+                // Überprüfe Konvergenz
+                let converged = true;
+                students.forEach(student => {
+                    if (Math.abs(newScores[student] - scores[student]) > epsilon) {
+                        converged = false;
+                    }
+                });
+
+                // Aktualisiere Scores
+                Object.assign(scores, newScores);
+
+                if (converged) break;
+            }
+
+            // Berechne Konfidenzintervalle
+            const confidenceIntervals = {};
+            students.forEach(student => {
+                let wins = 0;
+                let total = 0;
+
+                Object.entries(comparisons).forEach(([key, results]) => {
+                    const [student1, student2] = key.split('_');
+                    if (student1 === student || student2 === student) {
+                        results.forEach(result => {
+                            total++;
+                            if ((student1 === student && result === 1) ||
+                                (student2 === student && result === 0)) {
+                                wins++;
+                            }
+                        });
+                    }
+                });
+
+                // Wilson Score Interval
+                const n = total;
+                const p = wins / (n || 1);
+                const z = 1.96; // 95% Konfidenzintervall
+                const factor = z * Math.sqrt((p * (1 - p)) / (n || 1));
+
+                confidenceIntervals[student] = factor;
+            });
+
+            // Speichere Scores und Konfidenzintervalle
+            classData.scores = scores;
+            classData.confidenceIntervals = confidenceIntervals;
+
+            // Aktualisiere UI
+            updateRankingTable(scores, confidenceIntervals);
+        }
+
+        function updateRankingTable(scores, confidenceIntervals) {
+            const tbody = document.querySelector('#rankingTable tbody');
+            tbody.innerHTML = '';
+
+            // Sortiere Schüler nach Score
+            const sortedStudents = Object.entries(scores)
+                .sort(([,a], [,b]) => b - a)
+                .map(([student]) => student);
+
+            sortedStudents.forEach((student, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${student}</td>
+                    <td>${(scores[student] * 100).toFixed(1)}%</td>
+                    <td>±${(confidenceIntervals[student] * 100).toFixed(1)}%</td>
+                    <td>
+                        <button class="btn" onclick="deleteStudent('${student}')">Löschen</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function updateUI() {
+            if (state.currentClass) {
+                updateComparisonUI();
+                updateRankings();
+            }
+        }
+
+        // Initialisiere die App
+        init();
+    </script>
+</body>
+</html>
