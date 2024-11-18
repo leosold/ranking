@@ -49,6 +49,16 @@
             border-radius: 8px;
             cursor: pointer;
         }
+        .tiny-btn {
+            flex: 0.2;
+            height: 100px;
+            font-size: 20px;
+            background-color: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
         .comparison-btn:hover {
             background-color: #0056b3;
         }
@@ -73,6 +83,9 @@
             border-radius: 4px;
             width: 200px;
         }
+		.selected {
+		    background-color: #cce5ff; /* Leichtes Blau zur Hervorhebung */
+		}
         table {
             width: 100%;
             border-collapse: collapse;
@@ -86,6 +99,41 @@
         th {
             background-color: #f8f9fa;
         }
+		
+		#classSelect {
+			background-color: #f8f9fa; /* Heller, passender Hintergrund (z. B. Hellblau) */
+		    color: black; /*#007AFF; /* Gleiche Schriftfarbe wie die Buttons */
+		    border: 2px solid #007AFF; /* Rahmen passend zur Button-Farbe */
+		    padding: 8px 16px; /* Etwas schmalere Polsterung als Buttons */
+		    border-radius: 4px; /* Leicht abgerundete Ecken */
+		    font-size: 16px; /* Gleiche Schriftgröße wie Buttons */
+		    cursor: pointer; /* Zeiger bei Hover */
+		    margin: 5px; /* Gleicher Abstand wie Buttons */
+		    text-align: left; /* Text zentrieren */
+		    appearance: auto; /* Standard-Dropdown-Stil beibehalten */
+		}
+		#classSelect:hover {
+		    background-color: #f8f9fa; /* Etwas dunklerer Hintergrund bei Hover */
+		    border-color: #0056b3; /* Rahmenfarbe dunkler */
+		}
+
+		#classSelect:focus {
+		    outline: none; /* Standard-Fokus-Rahmen entfernen */
+		    border-color: #0056b3; /* Rahmenfarbe bei Fokus */
+		    box-shadow: 0 0 5px rgba(0, 87, 179, 0.5); /* Leuchtender Effekt bei Fokus */
+		}
+		
+	    /* Unscharfer Zustand */
+	    .blurred {
+	       filter: blur(10px);
+	       pointer-events: all; /* Ermöglicht Klick auf das gesamte unscharfe Element */
+	       cursor: pointer; /* Zeigt an, dass der Inhalt angeklickt werden kann */
+	     }
+
+	     /* Deaktiviert Klicks auf untergeordnete Elemente, wenn der Inhalt unscharf ist */
+	     .blurred * {
+	       pointer-events: none;
+	     }
     </style>
 </head>
 <body>
@@ -93,12 +141,11 @@
         <h1>Schüler-Ranking</h1>
         
         <div id="classManagement">
-            <h2>Klassenverwaltung</h2>
             <select id="classSelect" onchange="selectClass()">
                 <option value="">Klasse auswählen...</option>
             </select>
             <button class="btn" onclick="showNewClassDialog()">Neue Klasse</button>
-            <button class="btn" onclick="deleteCurrentClass()">Klasse löschen</button>
+            <button class="btn" id="deleteClassButton" onclick="deleteCurrentClass()" style="display: none;">Klasse löschen</button>
         </div>
 
         <div id="newClassDialog" class="hidden">
@@ -120,20 +167,18 @@
         </div>
 
         <div id="comparisonSection" class="hidden">
-            <h2>Paarvergleich</h2>
             <div class="progress">
                 <div>Fortschritt: <span id="progressText">0%</span></div>
                 <div><span id="remainingComparisons"></span></div>
             </div>
-            <p>Welcher Schüler hat die bessere Leistung gezeigt?</p>
             <div class="comparison-container">
                 <button id="student1" class="comparison-btn" onclick="compareStudents(0)"></button>
+				<button class="tiny-btn" onclick="skipComparison()">=</button>
                 <button id="student2" class="comparison-btn" onclick="compareStudents(1)"></button>
             </div>
         </div>
 
         <div id="resultSection" class="hidden">
-            <h2>Aktuelles Ranking</h2>
             <table id="rankingTable">
                 <thead>
                     <tr>
@@ -146,17 +191,120 @@
                 </thead>
                 <tbody></tbody>
             </table>
+			<button class="btn" onclick="resetRanking()">Ranking zurücksetzen</button>
+			<button class="btn" onclick="showTSV()">CSV kopieren</button>
         </div>
-    </div>
 
+		<button class="btn" onclick="downloadBackup()">Backup</button>
+		<input type="file" id="uploadInput" style="display:none" onchange="uploadBackup(event)">
+		<button class="btn" onclick="document.getElementById('uploadInput').click()">Wiederherstellen</button>
+    </div>
+	
     <script>
-        // Datenstruktur
-        let state = {
-            classes: {},
-            currentClass: null,
-            currentComparison: null,
-            comparisons: [],
-        };
+		// TrueSkill-Implementierung
+        class trueSkill {
+            constructor() {
+                this.mu = 25.0;          // Standardwert für initialen Skill
+                this.sigma = this.mu / 3; // Standardabweichung
+                this.beta = this.sigma / 3;//2; // Skill-Unterschied für 76% Siegwahrscheinlichkeit
+                this.tau = this.sigma / 100; // Dynamikfaktor
+                this.drawProbability = 0.0; // Keine Unentschieden in unserem Fall
+            }
+
+            createRating() {
+                return {
+                    mu: this.mu,
+                    sigma: this.sigma
+                };
+            }
+
+            // Gaussian PDF
+            gaussian(x, mu, sigma) {
+                const sqrt2pi = Math.sqrt(2 * Math.PI);
+                const exponent = -0.5 * Math.pow((x - mu) / sigma, 2);
+                return Math.exp(exponent) / (sqrt2pi * sigma);
+            }
+
+            // Gaussian CDF
+            gaussianCDF(x, mu, sigma) {
+                return 0.5 * (1 + this.erf((x - mu) / (sigma * Math.sqrt(2))));
+            }
+
+            // Error Function Approximation
+            erf(x) {
+                const sign = x >= 0 ? 1 : -1;
+                x = Math.abs(x);
+                const a1 = 0.254829592;
+                const a2 = -0.284496736;
+                const a3 = 1.421413741;
+                const a4 = -1.453152027;
+                const a5 = 1.061405429;
+                const p = 0.3275911;
+                const t = 1.0 / (1.0 + p * x);
+                const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+                return sign * y;
+            }
+
+            updateRating(winner, loser) {
+                const c = Math.sqrt(2 * this.beta * this.beta + Math.pow(winner.sigma, 2) + Math.pow(loser.sigma, 2));
+                const winnerMuUpdated = winner.mu + (winner.sigma * winner.sigma / c) * this.gaussian((winner.mu - loser.mu) / c, 0, 1) / this.gaussianCDF((winner.mu - loser.mu) / c, 0, 1);
+                const loserMuUpdated = loser.mu - (loser.sigma * loser.sigma / c) * this.gaussian((winner.mu - loser.mu) / c, 0, 1) / this.gaussianCDF((winner.mu - loser.mu) / c, 0, 1);
+        
+                const winnerSigmaUpdated = winner.sigma * Math.sqrt(1 - (winner.sigma * winner.sigma / (c * c)) * this.gaussian((winner.mu - loser.mu) / c, 0, 1) / this.gaussianCDF((winner.mu - loser.mu) / c, 0, 1) * ((winner.mu - loser.mu) / c + this.gaussian((winner.mu - loser.mu) / c, 0, 1) / this.gaussianCDF((winner.mu - loser.mu) / c, 0, 1)));
+                const loserSigmaUpdated = loser.sigma * Math.sqrt(1 - (loser.sigma * loser.sigma / (c * c)) * this.gaussian((winner.mu - loser.mu) / c, 0, 1) / this.gaussianCDF((winner.mu - loser.mu) / c, 0, 1) * ((winner.mu - loser.mu) / c + this.gaussian((winner.mu - loser.mu) / c, 0, 1) / this.gaussianCDF((winner.mu - loser.mu) / c, 0, 1)));
+
+                return {
+                    winner: { mu: winnerMuUpdated, sigma: winnerSigmaUpdated },
+                    loser: { mu: loserMuUpdated, sigma: loserSigmaUpdated }
+                };
+            }
+
+            getConservativeRating(rating) {
+                return rating.mu - 3 * rating.sigma;
+            }
+        }
+		
+		// 2. State-Management Funktionen
+		function saveState() {
+		    const saveableState = {
+		        classes: state.classes,
+		        currentClass: state.currentClass,
+		        remainingComparisons: state.remainingComparisons,
+		        compareIndex: state.compareIndex
+		    };
+		    localStorage.setItem('rankingAppState', JSON.stringify(saveableState));
+		}
+
+		function loadState() {
+		    const savedState = localStorage.getItem('rankingAppState');
+		    if (savedState) {
+		        const parsedState = JSON.parse(savedState);
+		        // Neues State-Objekt erstellen
+		        state = {
+		            trueSkill: new trueSkill(),
+		            classes: parsedState.classes || {},
+		            currentClass: null, //parsedState.currentClass || null,
+		            remainingComparisons: parsedState.remainingComparisons || [],
+		            compareIndex: parsedState.compareIndex || 0
+		        };
+		    }
+		    // Wenn kein gespeicherter State existiert, behalten wir den initialen State
+		}
+		
+        // Initiale State-Definition bleibt gleich, aber füge TrueSkill hinzu
+		let state = {
+		    trueSkill: new trueSkill(),
+		    classes: {},
+		    currentClass: null,
+		    remainingComparisons: [],
+		    compareIndex: 0
+		};
+
+		// 4. Event Listener für Seitenlade
+		document.addEventListener('DOMContentLoaded', () => {
+		    loadState();
+		    updateClassSelect();
+		});
 
         // Initialisierung
         function init() {
@@ -164,17 +312,7 @@
             updateClassSelect();
         }
 
-        // Speichern/Laden
-        function loadState() {
-            const savedState = localStorage.getItem('rankingAppState');
-            if (savedState) {
-                state = JSON.parse(savedState);
-            }
-        }
 
-        function saveState() {
-            localStorage.setItem('rankingAppState', JSON.stringify(state));
-        }
 
         // Klassenverwaltung
         function updateClassSelect() {
@@ -189,6 +327,10 @@
                 }
                 select.appendChild(option);
             });
+			
+			// Sichtbarkeit des "Klasse löschen"-Buttons aktualisieren
+		    const deleteButton = document.getElementById('deleteClassButton');
+		    deleteButton.style.display = state.currentClass ? 'inline-block' : 'none';
         }
 
         function showNewClassDialog() {
@@ -201,10 +343,10 @@
             document.getElementById('studentsList').value = '';
         }
 
-        function createNewClass() {
+		function createNewClass() {
             const className = document.getElementById('newClassName').value.trim();
             const studentsText = document.getElementById('studentsList').value.trim();
-            
+    
             if (!className) {
                 alert('Bitte geben Sie einen Klassennamen ein.');
                 return;
@@ -219,18 +361,25 @@
                 return;
             }
 
+            // Initialisiere TrueSkill Ratings für jeden Schüler
+            const ratings = {};
+            students.forEach(student => {
+                ratings[student] = state.trueSkill.createRating();
+            });
+
             state.classes[className] = {
                 students: students,
                 comparisons: {},
-                scores: {}
+                ratings: ratings
             };
 
             saveState();
+			selectClass(className);
             updateClassSelect();
             hideNewClassDialog();
-            selectClass(className);
+            
         }
-
+				
         function deleteCurrentClass() {
             if (!state.currentClass) return;
             
@@ -240,6 +389,7 @@
                 saveState();
                 updateClassSelect();
                 hideAllSections();
+	            updateUI(); // ergänzt
             }
         }
 
@@ -304,12 +454,14 @@
             saveState();
             
             if (selectedClass) {
-                document.getElementById('studentManagement').classList.remove('hidden');
+                //document.getElementById('studentManagement').classList.remove('hidden');
                 document.getElementById('comparisonSection').classList.remove('hidden');
                 document.getElementById('resultSection').classList.remove('hidden');
+				deleteClassButton.style.display = 'inline-block'
                 updateUI();
             } else {
                 hideAllSections();
+		        deleteClassButton.style.display = 'none'; // Button ausblenden, wenn keine Klasse ausgewählt ist
             }
         }
 
@@ -319,71 +471,73 @@
             document.getElementById('resultSection').classList.add('hidden');
         }
 		
-		function getNextComparison() {
-		    if (!state.currentClass) return null;
+        function getNextComparison() {
+            if (!state.currentClass) return null;
 
-		    const classData = state.classes[state.currentClass];
-		    const students = classData.students;
-		    const comparisons = classData.comparisons || {};
-		    const scores = classData.scores || {};
+            const classData = state.classes[state.currentClass];
+            const students = classData.students;
+            const ratings = classData.ratings;
 
-		    // Finde alle möglichen Paare mit ihrer Priorität
-		    let pairs = [];
-		    for (let i = 0; i < students.length; i++) {
-		        for (let j = i + 1; j < students.length; j++) {
-		            const student1 = students[i];
-		            const student2 = students[j];
-		            const key = `${student1}_${student2}`;
-		            const reverseKey = `${student2}_${student1}`;
-            
-		            // Zähle bisherige Vergleiche
-		            const compResults = [...(comparisons[key] || []), 
-		                               ...(comparisons[reverseKey] || []).map(r => 1 - r)];
-		            const compCount = compResults.length;
-            
-		            // Berechne Priorität für dieses Paar
-		            let priority = 0;
-            
-		            // 1. Grundpriorität: Weniger verglichene Paare bevorzugen
-		            priority += 100 / (compCount + 1);
-            
-		            // 2. Knappe Ergebnisse benötigen mehr Vergleiche
-		            if (compCount > 0) {
-		                const wins = compResults.filter(r => r === 1).length;
-		                const winRate = wins / compCount;
-		                const closeness = 4 * Math.abs(winRate - 0.5); // 0 für 50:50, 2 für 100:0
-		                priority += 50 * (1 - closeness);
-		            }
-            
-		            // 3. Benachbarte Ränge im aktuellen Ranking bevorzugen
-		            if (Object.keys(scores).length > 0) {
-		                const scoreDiff = Math.abs(scores[student1] - scores[student2]);
-		                priority += 30 * (1 - scoreDiff);
-		            }
+            // Finde Paare mit der größten Unsicherheit
+            let pairs = [];
+            for (let i = 0; i < students.length; i++) {
+                for (let j = i + 1; j < students.length; j++) {
+                    const student1 = students[i];
+                    const student2 = students[j];
+                    
+                    // Kombinierte Unsicherheit beider Schüler
+                    const uncertainty = ratings[student1].sigma + ratings[student2].sigma;
+                    
+                    // Anzahl bisheriger Vergleiche
+                    const key = `${student1}_${student2}`;
+                    const reverseKey = `${student2}_${student1}`;
+                    const compareCount = (classData.comparisons[key]?.length || 0) + 
+                                      (classData.comparisons[reverseKey]?.length || 0);
 
-		            pairs.push({
-		                students: [student1, student2],
-		                count: compCount,
-		                priority: priority
-		            });
-		        }
-		    }
+                    pairs.push({
+                        students: [student1, student2],
+                        uncertainty: uncertainty,
+                        compareCount: compareCount
+                    });
+                }
+            }
 
-		    // Sortiere nach Priorität
-		    pairs.sort((a, b) => b.priority - a.priority);
+            // Sortiere nach Unsicherheit und bevorzuge weniger verglichene Paare
+            pairs.sort((a, b) => {
+                if (a.compareCount === 0 && b.compareCount > 0) return -1;
+                if (b.compareCount === 0 && a.compareCount > 0) return 1;
+                return b.uncertainty - a.uncertainty;
+            });
 
-		    // Wähle aus den Top 3 Paaren zufällig aus
-		    const topPairs = pairs.slice(0, 3);
-		    const selectedPair = topPairs[Math.floor(Math.random() * topPairs.length)];
-    
-		    // Mische die Reihenfolge der Schüler
-		    if (Math.random() < 0.5) {
-		        selectedPair.students.reverse();
-		    }
+            // Wähle eines der Top-3 Paare zufällig
+            const topPairs = pairs.slice(0, 3);
+            const selectedPair = topPairs[Math.floor(Math.random() * topPairs.length)];
 
-		    return selectedPair.students;
+            // Zufällige Reihenfolge
+            if (Math.random() < 0.5) {
+                selectedPair.students.reverse();
+            }
+
+            return selectedPair.students;
+        }
+		
+		function setNextComparison(student1, student2) {
+		    state.currentComparison = [student1, student2];
+		    document.getElementById('student1').textContent = student1;
+		    document.getElementById('student2').textContent = student2;
+		    saveState();
 		}
 		
+		function skipComparison() {
+		    // Überspringt das aktuelle Pairing und lädt ein neues
+		    const newComparison = getNextComparison();
+		    if (newComparison) {
+		        state.currentComparison = newComparison;
+		        document.getElementById('student1').textContent = newComparison[0];
+		        document.getElementById('student2').textContent = newComparison[1];
+		        saveState();
+		    }
+		}
 
         function updateComparisonUI() {
             const comparison = getNextComparison();
@@ -396,74 +550,57 @@
             updateProgress();
         }
 
-        function compareStudents(winner) {
+        function compareStudents(winnerIndex) {
             if (!state.currentComparison) return;
 
             const [student1, student2] = state.currentComparison;
-            const key = `${student1}_${student2}`;
-            
             const classData = state.classes[state.currentClass];
-            classData.comparisons = classData.comparisons || {};
-            classData.comparisons[key] = classData.comparisons[key] || [];
-            
-            // Speichere das Ergebnis (1 für student1 gewonnen, 0 für student2 gewonnen)
-            classData.comparisons[key].push(winner === 0 ? 1 : 0);
+            const winner = winnerIndex === 0 ? student1 : student2;
+            const loser = winnerIndex === 0 ? student2 : student1;
 
-            updateRankings();
+            // Update TrueSkill ratings
+            const result = state.trueSkill.updateRating(
+                classData.ratings[winner],
+                classData.ratings[loser]
+            );
+
+            classData.ratings[winner] = result.winner;
+            classData.ratings[loser] = result.loser;
+
+            // Speichere den Vergleich
+            const key = `${student1}_${student2}`;
+            classData.comparisons[key] = classData.comparisons[key] || [];
+            classData.comparisons[key].push(winnerIndex === 0 ? 1 : 0);
+
             saveState();
-            updateComparisonUI();
+            updateUI();
         }
 
-		function updateProgress() {
-		    const classData = state.classes[state.currentClass];
-		    const students = classData.students;
-		    const comparisons = classData.comparisons || {};
-    
-		    // Gesamtzahl möglicher Paare: n * (n-1) / 2
-		    const n = students.length;
-		    const totalPossiblePairs = (n * (n-1)) / 2;
-    
-		    // Zähle aktuelle Vergleiche pro Paar
-		    const pairComparisons = {};
-		    Object.entries(comparisons).forEach(([pair, results]) => {
-		        pairComparisons[pair] = results.length;
-		        // Berücksichtige auch die umgekehrte Reihenfolge
-		        const [student1, student2] = pair.split('_');
-		        const reversePair = `${student2}_${student1}`;
-		        pairComparisons[reversePair] = results.length;
-		    });
-    
-		    // Zähle abgeschlossene Vergleiche
-		    let completedComparisons = 0;
-		    for (let i = 0; i < students.length; i++) {
-		        for (let j = i + 1; j < students.length; j++) {
-		            const pair = `${students[i]}_${students[j]}`;
-		            const reversePair = `${students[j]}_${students[i]}`;
-		            const pairCount = (pairComparisons[pair] || 0) + (pairComparisons[reversePair] || 0);
-		            completedComparisons += pairCount;
-		        }
-		    }
 
-		    // Ziel: 1 (2) Vergleiche pro Paar im Durchschnitt
-		    const targetComparisons = totalPossiblePairs; // * 2;
-    
-		    // Berechne Fortschritt (0-100%)
-		    const progress = Math.round((completedComparisons / targetComparisons) * 100);
-    
-		    // Update UI
-		    document.getElementById('progressText').textContent = `${progress}%`;
-		    document.getElementById('remainingComparisons').textContent = 
-		        `${completedComparisons} von ${targetComparisons} Vergleichen`;
+        function updateProgress() {
+            const classData = state.classes[state.currentClass];
+            const ratings = classData.ratings;
+            
+            // Berechne durchschnittliche Unsicherheit (sigma)
+            const avgSigma = Object.values(ratings)
+                .reduce((sum, rating) => sum + rating.sigma, 0) / Object.keys(ratings).length;
+            
+            // Normalisiere auf Prozent (initial sigma ist etwa 8.33)
+            const initialSigma = state.trueSkill.sigma;
+            const progress = Math.min(100, Math.max(0, 
+                Math.round((1 - avgSigma / initialSigma) * 100)
+            ));
 
-		    // Detaillierte Statistik für Entwicklungszwecke
-		    console.log({
-		        'Anzahl Schüler': n,
-		        'Mögliche Paare': totalPossiblePairs,
-		        'Ziel Vergleiche': targetComparisons,
-		        'Durchgeführte Vergleiche': completedComparisons,
-		        'Fortschritt': progress + '%'
-		    });
-		}
+            document.getElementById('progressText').textContent = `${progress}%`;
+            
+            // Zähle durchgeführte Vergleiche
+            const comparisons = Object.values(classData.comparisons)
+                .reduce((sum, arr) => sum + arr.length, 0);
+            
+            document.getElementById('remainingComparisons').textContent = 
+                `${comparisons} Vergleiche durchgeführt`;
+        }
+		 
 		
         function updateRankings() {
             if (!state.currentClass) return;
@@ -577,29 +714,92 @@
             updateRankingTable(scores, confidenceIntervals);
         }
 
-        function updateRankingTable(scores, confidenceIntervals) {
-            const tbody = document.querySelector('#rankingTable tbody');
-            tbody.innerHTML = '';
+		function updateRankingTable() {
+		    const tbody = document.querySelector('#rankingTable tbody');
+		    tbody.innerHTML = '';
 
-            // Sortiere Schüler nach Score
-            const sortedStudents = Object.entries(scores)
-                .sort(([,a], [,b]) => b - a)
-                .map(([student]) => student);
+		    const classData = state.classes[state.currentClass];
+		    const ratings = classData.ratings;
 
-            sortedStudents.forEach((student, index) => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${index + 1}</td>
-                    <td>${student}</td>
-                    <td>${(scores[student] * 100).toFixed(1)}%</td>
-                    <td>±${(confidenceIntervals[student] * 100).toFixed(1)}%</td>
-                    <td>
-                        <button class="btn" onclick="deleteStudent('${student}')">Löschen</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
+		    let selectedStudents = [];  // Array zum Speichern der ausgewählten Schüler
+
+		    const sortedStudents = Object.entries(ratings)
+		        .map(([student, rating]) => ({
+		            name: student,
+		            conservativeRating: state.trueSkill.getConservativeRating(rating),
+		            rating: rating
+		        }))
+		        .sort((a, b) => b.conservativeRating - a.conservativeRating);
+
+		    sortedStudents.forEach((student, index) => {
+		        const row = document.createElement('tr');
+		        row.innerHTML = `
+		            <td>${index + 1}</td>
+		            <td>${student.name}</td>
+		            <td>${student.rating.mu.toFixed(1)}</td>
+		            <td>±${student.rating.sigma.toFixed(1)}</td>
+		            <td>
+		                <button class="btn" onclick="deleteStudent('${student.name}')">Löschen</button>
+		            </td>
+		        `;
+
+		        // Event-Listener für die Auswahl des Schülers
+		        row.addEventListener('click', () => {
+		            // Wenn der Schüler noch nicht ausgewählt ist, Auswahl hinzufügen
+		            if (selectedStudents.length < 2 && !selectedStudents.includes(student.name)) {
+		                selectedStudents.push(student.name);
+		                row.classList.add('selected');
+		            } else if (selectedStudents.includes(student.name)) {
+		                // Wenn der Schüler schon ausgewählt ist, Auswahl entfernen
+		                selectedStudents = selectedStudents.filter(name => name !== student.name);
+		                row.classList.remove('selected');
+		            }
+
+		            // Wenn zwei Schüler ausgewählt sind, das Pairing festlegen und Auswahl zurücksetzen
+		            if (selectedStudents.length === 2) {
+		                setNextComparison(selectedStudents[0], selectedStudents[1]);
+		                selectedStudents = [];  // Auswahl zurücksetzen
+
+		                // Entfernen der Hervorhebung von allen Zeilen nach der Auswahl
+		                document.querySelectorAll('.selected').forEach(row => {
+		                    row.classList.remove('selected');
+		                });
+		            }
+		        });
+
+		        tbody.appendChild(row);
+		    });
+		}
+
+		
+		function resetRanking() {
+		    if (!state.currentClass) return;
+    		
+            if (confirm(`Ranking wirklich zurücksetzen?`)) {
+				const classData = state.classes[state.currentClass];
+				classData.ratings = {};
+				classData.comparisons = {};
+				// Reinitialisieren der TrueSkill-Ratings für alle Schüler
+				classData.students.forEach(student => {
+		        	classData.ratings[student] = state.trueSkill.createRating();
+		    	});
+			}
+
+		    saveState();
+		    updateUI();
+		}
+		
+		function showTSV() {
+			const classData = state.classes[state.currentClass];
+			    let tsvContent = "Name\tScore\n";
+			    classData.students
+			      .sort((a, b) => classData.ratings[b].mu - classData.ratings[a].mu)
+			      .forEach(student => {
+					
+			        tsvContent += `${student}\t${(classData.ratings[student].mu).toFixed(1)}\n`;
+			      });
+				navigator.clipboard.writeText(tsvContent.replace(/\./g, ','));
+		}
 
         function updateUI() {
             if (state.currentClass) {
@@ -610,6 +810,79 @@
 
         // Initialisiere die App
         init();
+		
+		//////////////////////////////////
+	    let timeoutId;
+
+	    // Funktion zum Unscharfstellen des Inhalts
+	    function blurContent() {
+	      const container = document.querySelector(".container");
+	      container.classList.add("blurred");
+	      container.addEventListener("click", unblurContent); // Klick-Listener hinzufügen
+	    }
+
+	    // Funktion zum Scharfstellen des Inhalts
+	    function unblurContent() {
+	      const container = document.querySelector(".container");
+	      container.classList.remove("blurred");
+	      container.removeEventListener("click", unblurContent); // Klick-Listener entfernen
+	      resetTimer(); // Timer zurücksetzen
+	    }
+
+	    // Timer zurücksetzen und erneut starten
+	    function resetTimer() {
+	      clearTimeout(timeoutId); // Alten Timer stoppen
+	      timeoutId = setTimeout(blurContent, 60000); // Neuen Timer starten (10 Sekunden)
+	    }
+
+	    // Timer auf jeder Interaktion zurücksetzen
+	    document.addEventListener("mousemove", resetTimer);
+	    document.addEventListener("keydown", resetTimer);
+	    document.addEventListener("click", resetTimer);
+
+	    // Starttimer beim Laden der Seite
+	    resetTimer();
+		
+		/////////////////////
+		function downloadBackup() {
+		    const data = localStorage.getItem('rankingAppState'); // Holen der gespeicherten Daten
+		    if (!data) {
+		        alert("Keine Daten vorhanden, die heruntergeladen werden können.");
+		        return;
+		    }
+
+		    const blob = new Blob([data], { type: 'application/json' }); // JSON-Daten in Blob umwandeln
+		    const url = URL.createObjectURL(blob);
+
+		    const link = document.createElement('a');
+		    link.href = url;
+		    link.download = 'backup.json'; // Dateiname für den Download
+		    link.click();
+
+		    URL.revokeObjectURL(url); // Speicher freigeben
+		}
+		function uploadBackup(event) {
+		    const file = event.target.files[0]; // Hochgeladene Datei abrufen
+		    if (!file) {
+		        alert("Keine Datei ausgewählt.");
+		        return;
+		    }
+
+		    const reader = new FileReader();
+		    reader.onload = function(event) {
+		        try {
+		            const data = JSON.parse(event.target.result); // JSON-Daten parsen
+		            localStorage.setItem('rankingAppState', JSON.stringify(data)); // In localStorage speichern
+		            alert("Daten erfolgreich hochgeladen.");
+		            loadState(); // Geladene Daten in der App anwenden
+		            updateClassSelect(); // Dropdown-Liste der Klassen aktualisieren
+		        } catch (e) {
+		            alert("Fehler beim Verarbeiten der Datei. Stellen Sie sicher, dass es sich um eine gültige Backup-Datei handelt.");
+		        }
+		    };
+
+		    reader.readAsText(file); // Datei als Text einlesen
+		}
     </script>
 </body>
 </html>
