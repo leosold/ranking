@@ -62,6 +62,19 @@
         .comparison-btn:hover {
             background-color: #0056b3;
         }
+		.icon-btn {
+		    background: none; /* Kein Hintergrund */
+		    border: none; /* Kein Rahmen */
+		    font-size: 18px; /* Icon-Größe */
+		    cursor: pointer; /* Zeiger beim Hover */
+		    color: #007AFF; /* Gleiche Farbe wie Buttons */
+		    padding: 5px;
+		}
+
+		.icon-btn:hover {
+		    color: #0056b3; /* Farbe bei Hover */
+		}
+		
         .progress {
             margin: 20px 0;
             padding: 10px;
@@ -182,11 +195,11 @@
             <table id="rankingTable">
                 <thead>
                     <tr>
-                        <th>Rang</th>
+                        <th></th>
                         <th>Name</th>
                         <th>Score</th>
-                        <th>Konfidenz</th>
-                        <th>Aktion</th>
+                        <th></th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -739,7 +752,7 @@
 		            <td>${student.rating.mu.toFixed(1)}</td>
 		            <td>±${student.rating.sigma.toFixed(1)}</td>
 		            <td>
-		                <button class="btn" onclick="deleteStudent('${student.name}')">Löschen</button>
+		                <button class="icon-btn" onclick="deleteStudent('${student.name}')">🗑️</button>
 		            </td>
 		        `;
 
