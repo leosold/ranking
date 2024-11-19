@@ -209,6 +209,7 @@
                         <th>Name</th>
                         <th>Score</th>
                         <th></th>
+		 				<th>&nbsp;&nbsp;</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -221,7 +222,7 @@
 		<input type="file" id="uploadInput" style="display:none" onchange="uploadBackup(event)">
 		<button class="btn" onclick="document.getElementById('uploadInput').click()">Wiederherstellen</button>
     </div>
-	
+	<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <script>
 		// TrueSkill-Implementierung
         class trueSkill {
@@ -639,6 +640,7 @@
 		            <td>${student}</td>
 		            <td>${rating.mu.toFixed(1)}</td>
 		            <td>±${rating.sigma.toFixed(1)}</td>
+					<td></td>
 		        `;
 				
 		        tbody.appendChild(row);
