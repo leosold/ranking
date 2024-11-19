@@ -96,9 +96,11 @@
             border-radius: 4px;
             width: 200px;
         }
-		.selected {
-		    background-color: #cce5ff; /* Leichtes Blau zur Hervorhebung */
+		/*.selected {
+		    background-color: #cce5ff; /* Leichtes Blau zur Hervorhebung 
 		}
+			*/
+		
         table {
             width: 100%;
             border-collapse: collapse;
@@ -147,11 +149,19 @@
 	     .blurred * {
 	       pointer-events: none;
 	     }
+		 
+		 /* dragging */
+		 .dragging {
+		     opacity: 0.5; /* Zeigt, dass die Zeile bewegt wird */
+		 }
+		 .dragover {
+		     border-top: 3px solid #007AFF; /* Markierung für das Ziel */
+		 }
+		 
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Schüler-Ranking</h1>
         
         <div id="classManagement">
             <select id="classSelect" onchange="selectClass()">
@@ -185,9 +195,9 @@
                 <div><span id="remainingComparisons"></span></div>
             </div>
             <div class="comparison-container">
-                <button id="student1" class="comparison-btn" onclick="compareStudents(0)"></button>
-				<button class="tiny-btn" onclick="skipComparison()">=</button>
-                <button id="student2" class="comparison-btn" onclick="compareStudents(1)"></button>
+                <button id="student1" class="comparison-btn" onclick="compareStudents(0); this.blur();"></button>
+				<button class="tiny-btn" onclick="skipComparison(); this.blur();">=</button>
+                <button id="student2" class="comparison-btn" onclick="compareStudents(1); this.blur();"></button>
             </div>
         </div>
 
@@ -198,7 +208,6 @@
                         <th></th>
                         <th>Name</th>
                         <th>Score</th>
-                        <th></th>
                         <th></th>
                     </tr>
                 </thead>
@@ -439,27 +448,6 @@
             updateUI();
         }
 
-        function deleteStudent(studentName) {
-            if (!state.currentClass) return;
-            
-            if (confirm(`Möchten Sie den Schüler "${studentName}" wirklich löschen?`)) {
-                const classData = state.classes[state.currentClass];
-                classData.students = classData.students.filter(s => s !== studentName);
-                
-                // Lösche alle Vergleiche mit diesem Schüler
-                Object.keys(classData.comparisons).forEach(key => {
-                    if (key.includes(studentName)) {
-                        delete classData.comparisons[key];
-                    }
-                });
-
-                delete classData.scores[studentName];
-                
-                saveState();
-                updateUI();
-            }
-        }
-
         // Vergleiche und Ranking
         function selectClass(className) {
             const selectedClass = className || document.getElementById('classSelect').value;
@@ -535,6 +523,7 @@
         }
 		
 		function setNextComparison(student1, student2) {
+			console.log(`Vergleich festgelegt: ${student1} vs. ${student2}`);
 		    state.currentComparison = [student1, student2];
 		    document.getElementById('student1').textContent = student1;
 		    document.getElementById('student2').textContent = student2;
@@ -614,176 +603,117 @@
                 `${comparisons} Vergleiche durchgeführt`;
         }
 		 
-		
-        function updateRankings() {
-            if (!state.currentClass) return;
+		function updateRankings() {
+		    if (!state.currentClass) return;
 
-            const classData = state.classes[state.currentClass];
-            const students = classData.students;
-            const comparisons = classData.comparisons || {};
+		    const classData = state.classes[state.currentClass];
+		    if (!classData || !classData.ratings) return;
 
-            // Bradley-Terry-Modell Implementation
-            const scores = {};
-            const iterations = 100;
-            const epsilon = 1e-10;
+		    // TrueSkill-Ratings abrufen und sortieren
+		    const sortedStudents = Object.entries(classData.ratings)
+		        .sort(([, a], [, b]) => b.mu - a.mu);
 
-            // Initialisiere Scores
-            students.forEach(student => {
-                scores[student] = 1.0;
-            });
+		    // Aktualisiere die Tabelle basierend auf TrueSkill-Ratings
+		    updateRankingTable(sortedStudents);
+		}
 
-            // Iterative Berechnung
-            for (let iter = 0; iter < iterations; iter++) {
-                const newScores = {};
-                const denominator = {};
-
-                // Initialisiere Zähler und Nenner
-                students.forEach(student => {
-                    newScores[student] = 0;
-                    denominator[student] = 0;
-                });
-
-                // Berechne neue Scores
-                Object.entries(comparisons).forEach(([key, results]) => {
-                    const [student1, student2] = key.split('_');
-                    results.forEach(result => {
-                        const prob1 = scores[student1] / (scores[student1] + scores[student2]);
-                        const prob2 = scores[student2] / (scores[student1] + scores[student2]);
-
-                        if (result === 1) {
-                            newScores[student1] += 1 / prob1;
-                            denominator[student1] += 1;
-                            denominator[student2] += 1;
-                        } else {
-                            newScores[student2] += 1 / prob2;
-                            denominator[student1] += 1;
-                            denominator[student2] += 1;
-                        }
-                    });
-                });
-
-                // Normalisiere Scores
-                students.forEach(student => {
-                    if (denominator[student] > 0) {
-                        newScores[student] = newScores[student] / denominator[student];
-                    } else {
-                        newScores[student] = scores[student];
-                    }
-                });
-
-                // Normalisiere auf Summe 1
-                const totalScore = Object.values(newScores).reduce((a, b) => a + b, 0);
-                students.forEach(student => {
-                    newScores[student] = newScores[student] / totalScore;
-                });
-
-                // Überprüfe Konvergenz
-                let converged = true;
-                students.forEach(student => {
-                    if (Math.abs(newScores[student] - scores[student]) > epsilon) {
-                        converged = false;
-                    }
-                });
-
-                // Aktualisiere Scores
-                Object.assign(scores, newScores);
-
-                if (converged) break;
-            }
-
-            // Berechne Konfidenzintervalle
-            const confidenceIntervals = {};
-            students.forEach(student => {
-                let wins = 0;
-                let total = 0;
-
-                Object.entries(comparisons).forEach(([key, results]) => {
-                    const [student1, student2] = key.split('_');
-                    if (student1 === student || student2 === student) {
-                        results.forEach(result => {
-                            total++;
-                            if ((student1 === student && result === 1) ||
-                                (student2 === student && result === 0)) {
-                                wins++;
-                            }
-                        });
-                    }
-                });
-
-                // Wilson Score Interval
-                const n = total;
-                const p = wins / (n || 1);
-                const z = 1.96; // 95% Konfidenzintervall
-                const factor = z * Math.sqrt((p * (1 - p)) / (n || 1));
-
-                confidenceIntervals[student] = factor;
-            });
-
-            // Speichere Scores und Konfidenzintervalle
-            classData.scores = scores;
-            classData.confidenceIntervals = confidenceIntervals;
-
-            // Aktualisiere UI
-            updateRankingTable(scores, confidenceIntervals);
-        }
-
-		function updateRankingTable() {
+		function updateRankingTable(sortedStudents) {
 		    const tbody = document.querySelector('#rankingTable tbody');
 		    tbody.innerHTML = '';
 
-		    const classData = state.classes[state.currentClass];
-		    const ratings = classData.ratings;
+		    let draggedRow = null;
+			//let selectedStudents = [];  // Array zum Speichern der ausgewählten Schüler
 
-		    let selectedStudents = [];  // Array zum Speichern der ausgewählten Schüler
-
-		    const sortedStudents = Object.entries(ratings)
-		        .map(([student, rating]) => ({
-		            name: student,
-		            conservativeRating: state.trueSkill.getConservativeRating(rating),
-		            rating: rating
-		        }))
-		        .sort((a, b) => b.conservativeRating - a.conservativeRating);
-
-		    sortedStudents.forEach((student, index) => {
+		    sortedStudents.forEach(([student, rating], index) => {
 		        const row = document.createElement('tr');
+		        row.draggable = true; // Macht die Zeile ziehbar
+
+		        // Drag-and-Drop-Event-Listener hinzufügen
+		        row.addEventListener('dragstart', handleDragStart);
+		        row.addEventListener('dragover', handleDragOver);
+		        row.addEventListener('drop', handleDrop);
+		        row.addEventListener('dragend', handleDragEnd);
+				
 		        row.innerHTML = `
 		            <td>${index + 1}</td>
-		            <td>${student.name}</td>
-		            <td>${student.rating.mu.toFixed(1)}</td>
-		            <td>±${student.rating.sigma.toFixed(1)}</td>
-		            <td>
-		                <button class="icon-btn" onclick="deleteStudent('${student.name}')">🗑️</button>
-		            </td>
+		            <td>${student}</td>
+		            <td>${rating.mu.toFixed(1)}</td>
+		            <td>±${rating.sigma.toFixed(1)}</td>
 		        `;
-
-		        // Event-Listener für die Auswahl des Schülers
-		        row.addEventListener('click', () => {
-		            // Wenn der Schüler noch nicht ausgewählt ist, Auswahl hinzufügen
-		            if (selectedStudents.length < 2 && !selectedStudents.includes(student.name)) {
-		                selectedStudents.push(student.name);
-		                row.classList.add('selected');
-		            } else if (selectedStudents.includes(student.name)) {
-		                // Wenn der Schüler schon ausgewählt ist, Auswahl entfernen
-		                selectedStudents = selectedStudents.filter(name => name !== student.name);
-		                row.classList.remove('selected');
-		            }
-
-		            // Wenn zwei Schüler ausgewählt sind, das Pairing festlegen und Auswahl zurücksetzen
-		            if (selectedStudents.length === 2) {
-		                setNextComparison(selectedStudents[0], selectedStudents[1]);
-		                selectedStudents = [];  // Auswahl zurücksetzen
-
-		                // Entfernen der Hervorhebung von allen Zeilen nach der Auswahl
-		                document.querySelectorAll('.selected').forEach(row => {
-		                    row.classList.remove('selected');
-		                });
-		            }
-		        });
-
+				
 		        tbody.appendChild(row);
+
+		        // Helper-Funktion: Dragging starten
+		        function handleDragStart(event) {
+		            draggedRow = row; // Speichert die gezogene Zeile
+		            row.classList.add('dragging');
+		        }
+
+		        // Helper-Funktion: Dragging über eine andere Zeile
+		        function handleDragOver(event) {
+		            event.preventDefault(); // Erlaubt das Ablegen// Entferne zunächst alle vorherigen dragover-Klassen
+    				document.querySelectorAll('.dragover').forEach(row => row.classList.remove('dragover'));
+		            const target = event.target.closest('tr');
+		            if (target && target !== draggedRow) {
+		                target.classList.add('dragover');
+		            }
+		        }
+
+		        // Helper-Funktion: Zeile ablegen
+		        function handleDrop(event) {
+		            event.preventDefault();
+		            const target = event.target.closest('tr');
+		            if (target && target !== draggedRow) {
+		                const tbody = document.querySelector('#rankingTable tbody');
+		                tbody.insertBefore(draggedRow, target); // Verschiebt die gezogene Zeile
+		                updateDragScores(draggedRow); // Berechnet neuen Score basierend auf der neuen Reihenfolge
+		            }
+		        }
+
+		        // Helper-Funktion: Dragging beenden
+		        function handleDragEnd(event) {
+		            row.classList.remove('dragging');
+		            document.querySelectorAll('.dragover').forEach(row => row.classList.remove('dragover'));
+		            draggedRow = null;
+		        }
 		    });
+
+		    // Aktualisiert die TrueSkill-Ratings basierend auf der neuen Reihenfolge
+			function updateDragScores(draggedRow) {
+			    const rows = Array.from(document.querySelectorAll('#rankingTable tbody tr'));
+    			const index = rows.findIndex(row => row === draggedRow);			    
+				const studentName = draggedRow.children[1].textContent;
+			    const classData = state.classes[state.currentClass];
+
+			    // Ratings NACH dem Drag-and-Drop
+			    const prevRating = index > 0 ? 
+			        parseFloat(rows[index - 1].children[2].textContent) : null;
+			    const nextRating = index < rows.length - 1 ? 
+			        parseFloat(rows[index + 1].children[2].textContent) : null;
+
+			    let newRating;
+			    if (prevRating !== null && nextRating !== null) {
+			        // Neuer Score ist der Durchschnitt der umgebenden Scores
+			        newRating = (prevRating + nextRating) / 2;
+			    } else if (prevRating !== null) {
+			        newRating = prevRating - 1;
+			    } else if (nextRating !== null) {
+			        newRating = nextRating + 1;
+			    } else {
+			        newRating = classData.ratings[studentName].mu;
+			    }
+
+			    // Aktualisiere das Rating in der Tabelle und im state
+			    draggedRow.children[2].textContent = newRating.toFixed(1);
+			    classData.ratings[studentName].mu = newRating;
+
+			    saveState();
+				updateUI(); 
+			}
+		    
 		}
 
+		
 		
 		function resetRanking() {
 		    if (!state.currentClass) return;
@@ -896,6 +826,8 @@
 
 		    reader.readAsText(file); // Datei als Text einlesen
 		}
+
+		
     </script>
 </body>
 </html>
