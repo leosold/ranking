@@ -96,10 +96,6 @@
             border-radius: 4px;
             width: 200px;
         }
-		/*.selected {
-		    background-color: #cce5ff; /* Leichtes Blau zur Hervorhebung 
-		}
-			*/
 		
         table {
             width: 100%;
@@ -630,20 +626,31 @@
 		        const row = document.createElement('tr');
 		        row.draggable = true; // Macht die Zeile ziehbar
 
+		        row.innerHTML = `
+		            <td>${index + 1}</td>
+		            <td>${student}</td>
+		            <td>${rating.mu.toFixed(1)}</td>
+		            <td>±${rating.sigma.toFixed(1)}</td>
+            		<td><span class="drag-handle" style="cursor: grab;">☰</span></td>
+				`;
 		        // Drag-and-Drop-Event-Listener hinzufügen
 		        row.addEventListener('dragstart', handleDragStart);
 		        row.addEventListener('dragover', handleDragOver);
 		        row.addEventListener('drop', handleDrop);
 		        row.addEventListener('dragend', handleDragEnd);
 				
-		        row.innerHTML = `
-		            <td>${index + 1}</td>
-		            <td>${student}</td>
-		            <td>${rating.mu.toFixed(1)}</td>
-		            <td>±${rating.sigma.toFixed(1)}</td>
-					<td></td>
-		        `;
-				
+				// Touchstart oder Mousedown auf den Drag-Handle leiten `dragstart` ein
+		        const dragHandle = row.querySelector('.drag-handle');
+		        dragHandle.addEventListener('touchstart', (e) => {
+		            e.preventDefault(); // Verhindert Scrollen
+		            const dragEvent = new DragEvent('dragstart', { bubbles: true });
+		            row.dispatchEvent(dragEvent);
+		        });
+		        dragHandle.addEventListener('mousedown', (e) => {
+		            const dragEvent = new DragEvent('dragstart', { bubbles: true });
+		            row.dispatchEvent(dragEvent);
+		        });
+
 		        tbody.appendChild(row);
 
 		        // Helper-Funktion: Dragging starten
