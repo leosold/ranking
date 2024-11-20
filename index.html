@@ -151,6 +151,8 @@
 		 .selected {
 		     outline: 2px solid #007AFF; /* Klarer Rahmen */
 			 box-shadow: 0 0 5px rgba(0, 87, 179, 0.5);
+		     position: relative; /* Falls nicht bereits vorhanden */
+		     z-index: 1000; /* Höher als andere Elemente */
 		 }
 
 		 .hover-insert {
@@ -682,7 +684,10 @@
 				    } else {
 				        // Markiere die neue Zeile, wenn keine andere ausgewählt ist
 				        selectedRow = row;
-				        row.classList.add('selected');
+						// Klasse mit Timeout hinzufügen
+				        setTimeout(() => {
+				            row.classList.add('selected');
+				        }, 0);						
 						row.offsetHeight; 
 				    }
 				});
