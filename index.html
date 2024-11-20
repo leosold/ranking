@@ -148,12 +148,33 @@
 	     }
 		 
 		 /* dragging */
-		 .dragging {
-		     opacity: 0.5; /* Zeigt, dass die Zeile bewegt wird */
+		 .selected {
+		     outline: 2px solid #007AFF; /* Klarer Rahmen */
+			 box-shadow: 0 0 5px rgba(0, 87, 179, 0.5);
 		 }
-		 .dragover {
-		     border-top: 3px solid #007AFF; /* Markierung für das Ziel */
+
+		 .hover-insert {
+		     border-top: 2px solid #007AFF; /* Linie zeigt Einfügeposition an */
 		 }
+
+		 .drag-handle-cell {
+		     text-align: right;
+		     padding-right: 10px;
+		 }
+
+		 .drag-handle {
+		     cursor: pointer;
+		     background: none;
+		     border: none;
+		     font-size: 1.2em;
+		     color: #333;
+		 }
+
+		 .drag-handle:hover {
+		     color: #000;
+		 }
+		 
+		 
 		 
     </style>
 </head>
@@ -619,110 +640,96 @@
 		    const tbody = document.querySelector('#rankingTable tbody');
 		    tbody.innerHTML = '';
 
-		    let draggedRow = null;
-			//let selectedStudents = [];  // Array zum Speichern der ausgewählten Schüler
+		    let selectedRow = null; // Aktuell ausgewählte Zeile
 
 		    sortedStudents.forEach(([student, rating], index) => {
 		        const row = document.createElement('tr');
-		        row.draggable = true; // Macht die Zeile ziehbar
-
 		        row.innerHTML = `
 		            <td>${index + 1}</td>
 		            <td>${student}</td>
 		            <td>${rating.mu.toFixed(1)}</td>
 		            <td>±${rating.sigma.toFixed(1)}</td>
-            		<td><span class="drag-handle" style="cursor: grab;">☰</span></td>
-				`;
-		        // Drag-and-Drop-Event-Listener hinzufügen
-		        row.addEventListener('dragstart', handleDragStart);
-		        row.addEventListener('dragover', handleDragOver);
-		        row.addEventListener('drop', handleDrop);
-		        row.addEventListener('dragend', handleDragEnd);
-				
-				// Touchstart oder Mousedown auf den Drag-Handle leiten `dragstart` ein
-		        const dragHandle = row.querySelector('.drag-handle');
-		        dragHandle.addEventListener('touchstart', (e) => {
-		            e.preventDefault(); // Verhindert Scrollen
-		            const dragEvent = new DragEvent('dragstart', { bubbles: true });
-		            row.dispatchEvent(dragEvent);
+		            <td class="drag-handle-cell">
+		                <button class="drag-handle" title="Zeile umordnen">⇵</button>
+		            </td>
+		        `;
+
+				// Event: Zeile auswählen oder deselektieren
+				row.querySelector('.drag-handle').addEventListener('click', () => {
+				    
+				});
+		        
+
+		        // Event: Zielzeile hover
+		        row.addEventListener('mouseenter', () => {
+		            if (selectedRow && selectedRow !== row) {
+		                row.classList.add('hover-insert'); // Zeigt die Einfügeposition an
+		            }
 		        });
-		        dragHandle.addEventListener('mousedown', (e) => {
-		            const dragEvent = new DragEvent('dragstart', { bubbles: true });
-		            row.dispatchEvent(dragEvent);
+
+		        row.addEventListener('mouseleave', () => {
+		            row.classList.remove('hover-insert'); // Entfernt den Hover-Effekt
 		        });
+
+		        // Event: Zeile einfügen
+				row.addEventListener('click', () => {
+				    if (selectedRow) {
+				        if (selectedRow === row) {
+				            // Falls die gleiche Zeile erneut angeklickt wird, deselektiere sie
+				            row.classList.remove('selected');
+				            selectedRow = null;
+				        } else {
+				            // Verschiebe die ausgewählte Zeile vor die angeklickte Zeile
+				            tbody.insertBefore(selectedRow, row);
+				            updateDragScores(selectedRow); // Aktualisiere den Score der verschobenen Zeile
+				            selectedRow.classList.remove('selected');
+				            selectedRow = null;
+				        }
+				    } else {
+				        // Markiere die neue Zeile, wenn keine andere ausgewählt ist
+				        selectedRow = row;
+				        row.classList.add('selected');
+				    }
+				});
+		        
 
 		        tbody.appendChild(row);
-
-		        // Helper-Funktion: Dragging starten
-		        function handleDragStart(event) {
-		            draggedRow = row; // Speichert die gezogene Zeile
-		            row.classList.add('dragging');
-		        }
-
-		        // Helper-Funktion: Dragging über eine andere Zeile
-		        function handleDragOver(event) {
-		            event.preventDefault(); // Erlaubt das Ablegen// Entferne zunächst alle vorherigen dragover-Klassen
-    				document.querySelectorAll('.dragover').forEach(row => row.classList.remove('dragover'));
-		            const target = event.target.closest('tr');
-		            if (target && target !== draggedRow) {
-		                target.classList.add('dragover');
-		            }
-		        }
-
-		        // Helper-Funktion: Zeile ablegen
-		        function handleDrop(event) {
-		            event.preventDefault();
-		            const target = event.target.closest('tr');
-		            if (target && target !== draggedRow) {
-		                const tbody = document.querySelector('#rankingTable tbody');
-		                tbody.insertBefore(draggedRow, target); // Verschiebt die gezogene Zeile
-		                updateDragScores(draggedRow); // Berechnet neuen Score basierend auf der neuen Reihenfolge
-		            }
-		        }
-
-		        // Helper-Funktion: Dragging beenden
-		        function handleDragEnd(event) {
-		            row.classList.remove('dragging');
-		            document.querySelectorAll('.dragover').forEach(row => row.classList.remove('dragover'));
-		            draggedRow = null;
-		        }
 		    });
 
-		    // Aktualisiert die TrueSkill-Ratings basierend auf der neuen Reihenfolge
-			function updateDragScores(draggedRow) {
-			    const rows = Array.from(document.querySelectorAll('#rankingTable tbody tr'));
-    			const index = rows.findIndex(row => row === draggedRow);			    
-				const studentName = draggedRow.children[1].textContent;
-			    const classData = state.classes[state.currentClass];
+		    // Aktualisiert den Score basierend auf der neuen Position
+		    function updateDragScores(movedRow) {
+		        const rows = Array.from(document.querySelectorAll('#rankingTable tbody tr'));
+		        const index = rows.findIndex(row => row === movedRow); // Neue Position finden
+		        const studentName = movedRow.children[1].textContent;
+		        const classData = state.classes[state.currentClass];
 
-			    // Ratings NACH dem Drag-and-Drop
-			    const prevRating = index > 0 ? 
-			        parseFloat(rows[index - 1].children[2].textContent) : null;
-			    const nextRating = index < rows.length - 1 ? 
-			        parseFloat(rows[index + 1].children[2].textContent) : null;
+		        // Ratings der Nachbarn
+		        const prevRating =
+		            index > 0 ? parseFloat(rows[index - 1].children[2].textContent) : null;
+		        const nextRating =
+		            index < rows.length - 1 ? parseFloat(rows[index + 1].children[2].textContent) : null;
 
-			    let newRating;
-			    if (prevRating !== null && nextRating !== null) {
-			        // Neuer Score ist der Durchschnitt der umgebenden Scores
-			        newRating = (prevRating + nextRating) / 2;
-			    } else if (prevRating !== null) {
-			        newRating = prevRating - 1;
-			    } else if (nextRating !== null) {
-			        newRating = nextRating + 1;
-			    } else {
-			        newRating = classData.ratings[studentName].mu;
-			    }
+		        let newRating;
+		        if (prevRating !== null && nextRating !== null) {
+		            // Neuer Score ist der Durchschnitt der umgebenden Scores
+		            newRating = (prevRating + nextRating) / 2;
+		        } else if (prevRating !== null) {
+		            newRating = prevRating - 1;
+		        } else if (nextRating !== null) {
+		            newRating = nextRating + 1;
+		        } else {
+		            newRating = classData.ratings[studentName].mu;
+		        }
 
-			    // Aktualisiere das Rating in der Tabelle und im state
-			    draggedRow.children[2].textContent = newRating.toFixed(1);
-			    classData.ratings[studentName].mu = newRating;
+		        // Aktualisiere den Score in der Tabelle und im State
+		        movedRow.children[2].textContent = newRating.toFixed(1);
+		        classData.ratings[studentName].mu = newRating;
 
-			    saveState();
-				updateUI(); 
-			}
-		    
+		        saveState(); // Speichere den neuen Zustand
+		        updateUI(); // Aktualisiere die Oberfläche
+		    }
 		}
-
+		
 		
 		
 		function resetRanking() {
