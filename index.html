@@ -686,14 +686,16 @@
 				        selectedRow = row;
 						// Klasse mit Timeout hinzufügen
 				        setTimeout(() => {
+							row.offsetHeight;
 				            row.classList.add('selected');
 				        }, 0);						
-						row.offsetHeight; 
+						 
 				    }
 				});
 		        
 
 		        tbody.appendChild(row);
+				row.offsetHeight;
 		    });
 
 		    // Aktualisiert den Score basierend auf der neuen Position
