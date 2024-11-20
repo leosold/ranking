@@ -654,12 +654,6 @@
 		            </td>
 		        `;
 
-				// Event: Zeile auswählen oder deselektieren
-				row.querySelector('.drag-handle').addEventListener('click', () => {
-				    
-				});
-		        
-
 		        // Event: Zielzeile hover
 		        row.addEventListener('mouseenter', () => {
 		            if (selectedRow && selectedRow !== row) {
@@ -689,6 +683,7 @@
 				        // Markiere die neue Zeile, wenn keine andere ausgewählt ist
 				        selectedRow = row;
 				        row.classList.add('selected');
+						row.offsetHeight; 
 				    }
 				});
 		        
