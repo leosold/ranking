@@ -161,21 +161,9 @@
 		 .drag-handle-cell {
 		     text-align: right;
 		     padding-right: 10px;
+		     color: #ddd;
 		 }
 
-		 .drag-handle {
-		     cursor: pointer;
-		     background: none;
-		     border: none;
-		     font-size: 1.2em;
-		     color: #333;
-		 }
-
-		 .drag-handle:hover {
-		     color: #000;
-		 }
-		 
-		 
 		 
     </style>
 </head>
@@ -650,9 +638,7 @@
 		            <td>${student}</td>
 		            <td>${rating.mu.toFixed(1)}</td>
 		            <td>±${rating.sigma.toFixed(1)}</td>
-		            <td class="drag-handle-cell">
-		                <button class="drag-handle" title="Zeile umordnen">⇵</button>
-		            </td>
+		            <td class="drag-handle-cell">⇵</td>
 		        `;
 
 		        // Event: Zielzeile hover
