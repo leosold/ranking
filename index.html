@@ -202,9 +202,9 @@
                 <div><span id="remainingComparisons"></span></div>
             </div>
             <div class="comparison-container">
-                <button id="student1" class="comparison-btn" onclick="compareStudents(0); this.blur();"></button>
-				<button class="tiny-btn" onclick="skipComparison(); this.blur();">=</button>
-                <button id="student2" class="comparison-btn" onclick="compareStudents(1); this.blur();"></button>
+                <button id="student1" class="comparison-btn" onclick="compareStudents(0)"></button>
+				<button class="tiny-btn" onclick="skipComparison()">=</button>
+                <button id="student2" class="comparison-btn" onclick="compareStudents(1)"></button>
             </div>
         </div>
 
@@ -716,6 +716,14 @@
 		        updateUI(); // Aktualisiere die Oberfläche
 		    }
 		}
+		
+		//Buttons zurückstellen
+		document.querySelectorAll('.comparison-btn, .tiny-btn').forEach(button => {
+		    button.addEventListener('click', () => {
+		        button.blur(); // Entfernt den Fokus nach Klick
+		    });
+		});
+		
 		
 		
 		
