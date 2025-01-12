@@ -141,13 +141,20 @@
 
 		 .ranking-list li {
 		     display: grid;
-		     grid-template-columns: 40px 1fr 80px 80px;
-		     gap: 10px;
+		     grid-template-columns: 40px minmax(100px, 1fr) 80px 80px 40px; /* Angepasst für Handle */
+		     align-items: center;
+		     gap: 8px;
 		     padding: 8px;
 		     background: white;
 		     border-bottom: 1px solid #ddd;
 		     user-select: none;
 		     touch-action: none;
+		 }
+
+		 .drag-handle {
+		     cursor: grab;
+		     color: #ccc;
+		     text-align: center;
 		 }
 
 		 .ranking-list li.sortable-ghost {
@@ -156,6 +163,16 @@
 
 		 .ranking-list li.sortable-drag {
 		     background: #f8f9fa;
+		 }
+		 
+		 /* Mobile Optimierung */
+		 @media (max-width: 600px) {
+		     .ranking-list li {
+		         grid-template-columns: 30px minmax(80px, 1fr) 60px 40px; /* Handle bleibt */
+		     }
+		     .ranking-list .sigma {
+		         display: none;
+		     }
 		 }
 		 
     </style>
@@ -617,23 +634,25 @@
 		    list.innerHTML = '';
 
 		    sortedStudents.forEach(([student, rating], index) => {
-		        const li = document.createElement('li');
-		        li.innerHTML = `
-		            <span>${index + 1}</span>
-		            <span>${student}</span>
-		            <span>${rating.mu.toFixed(1)}</span>
-		            <span class="sigma">±${rating.sigma.toFixed(1)}</span>
-		        `;
-		        list.appendChild(li);
+				const li = document.createElement('li');
+			    li.innerHTML = `
+			        <span>${index + 1}</span>
+			        <span>${student}</span>
+			        <span>${rating.mu.toFixed(1)}</span>
+			        <span class="sigma">±${rating.sigma.toFixed(1)}</span>
+			        <span class="drag-handle">⋮⋮</span>
+			    `;
+			    list.appendChild(li);
 		    });
 
 		    // Initialisiere Sortable wenn noch nicht geschehen
 		    if (!list.sortable) {
 		        list.sortable = new Sortable(list, {
-		            animation: 150,
-		            ghostClass: 'sortable-ghost',
-		            dragClass: 'sortable-drag',
-		            onEnd: function(evt) {
+			animation: 150,
+			        ghostClass: 'sortable-ghost',
+			        dragClass: 'sortable-drag',
+			        handle: '.drag-handle', // Nur an der Handle ziehen
+			        onEnd: function(evt) {
 		                const item = evt.item;
 		                const studentName = item.children[1].textContent;
 		                const classData = state.classes[state.currentClass];
