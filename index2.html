@@ -132,7 +132,6 @@
 	       pointer-events: none;
 	     }
 		 
-		 
 		 .ranking-list {
 		     list-style: none;
 		     padding: 0;
@@ -141,20 +140,21 @@
 
 		 .ranking-list li {
 		     display: grid;
-		     grid-template-columns: 40px minmax(100px, 1fr) 80px 80px 40px; /* Angepasst für Handle */
+		     grid-template-columns: 40px minmax(100px, 1fr) 80px 80px 40px;
 		     align-items: center;
 		     gap: 8px;
 		     padding: 8px;
 		     background: white;
 		     border-bottom: 1px solid #ddd;
 		     user-select: none;
-		     touch-action: none;
 		 }
 
 		 .drag-handle {
 		     cursor: grab;
 		     color: #ccc;
 		     text-align: center;
+		     touch-action: none;
+		     padding: 3px; 
 		 }
 
 		 .ranking-list li.sortable-ghost {
@@ -648,10 +648,13 @@
 		    // Initialisiere Sortable wenn noch nicht geschehen
 		    if (!list.sortable) {
 		        list.sortable = new Sortable(list, {
-			animation: 150,
+					animation: 150,
 			        ghostClass: 'sortable-ghost',
 			        dragClass: 'sortable-drag',
-			        handle: '.drag-handle', // Nur an der Handle ziehen
+			        handle: '.drag-handle',
+			        touchStartThreshold: 5, // Toleranz für unbeabsichtigte Bewegungen
+			        delay: 150, // Kurze Verzögerung für bessere Mobile-Erkennung
+			        delayOnTouchOnly: true, // Verzögerung nur auf Touch-Geräten
 			        onEnd: function(evt) {
 		                const item = evt.item;
 		                const studentName = item.children[1].textContent;
