@@ -175,6 +175,19 @@
 		     }
 		 }
 		 
+		 .delete-student {
+		     color: #ddd;
+		     background: none;
+		     border: none;
+		     cursor: pointer;
+		     padding: 0 5px;
+		     font-size: 14px;
+		 }
+
+		 .delete-student:hover {
+		     color: #ff4444;
+		 }
+		 
     </style>
 </head>
 <body>
@@ -246,7 +259,7 @@
 		        };
 		    }
 
-		    gaussian(x, mu, sigma) {
+			gaussian(x, mu, sigma) {
 		        const sqrt2pi = Math.sqrt(2 * Math.PI);
 		        const exponent = -0.5 * Math.pow((x - mu) / sigma, 2);
 		        return Math.exp(exponent) / (sqrt2pi * sigma);
@@ -268,6 +281,29 @@
 		        const t = 1.0 / (1.0 + p * x);
 		        const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
 		        return sign * y;
+		    }
+			
+			updateRatingDraw(player1, player2) {
+		        const c = Math.sqrt(2 * this.beta * this.beta + Math.pow(player1.sigma, 2) + Math.pow(player2.sigma, 2));
+		        const diff = (player1.mu - player2.mu) / c;
+    
+		        // Berechne die Wahrscheinlichkeitsdichte für ein Unentschieden
+		        const v = this.gaussian(diff, 0, 1);
+    
+		        // Update für beide Spieler
+		        const meanUpdate = (player2.mu - player1.mu) * (player1.sigma * player1.sigma) / (c * c);
+		        const varianceUpdate = (1 - Math.pow(player1.sigma, 4) / Math.pow(c, 4));
+    
+		        const player1MuNew = player1.mu + meanUpdate;
+		        const player2MuNew = player2.mu - meanUpdate;
+    
+		        const player1SigmaNew = player1.sigma * Math.sqrt(varianceUpdate);
+		        const player2SigmaNew = player2.sigma * Math.sqrt(varianceUpdate);
+
+		        return {
+		            player1: { mu: player1MuNew, sigma: player1SigmaNew },
+		            player2: { mu: player2MuNew, sigma: player2SigmaNew }
+		        };
 		    }
 
 		    updateRating(winner, loser) {
@@ -543,14 +579,28 @@
 		}
 		
 		function skipComparison() {
-		    // Überspringt das aktuelle Pairing und lädt ein neues
-		    const newComparison = getNextComparison();
-		    if (newComparison) {
-		        state.currentComparison = newComparison;
-		        document.getElementById('student1').textContent = newComparison[0];
-		        document.getElementById('student2').textContent = newComparison[1];
-		        saveState();
-		    }
+		    if (!state.currentComparison) return;
+    
+		    const [student1, student2] = state.currentComparison;
+		    const classData = state.classes[state.currentClass];
+    
+		    // Update TrueSkill ratings für Unentschieden
+		    const result = state.trueSkill.updateRatingDraw(
+		        classData.ratings[student1],
+		        classData.ratings[student2]
+		    );
+    
+		    // Aktualisiere die Ratings
+		    classData.ratings[student1] = result.player1;
+		    classData.ratings[student2] = result.player2;
+    
+		    // Speichere das Unentschieden
+		    const key = `${student1}_${student2}`;
+		    classData.comparisons[key] = classData.comparisons[key] || [];
+		    classData.comparisons[key].push('draw');  // 'draw' statt 0 oder 1
+    
+		    saveState();
+		    updateUI();
 		}
 
         function updateComparisonUI() {
@@ -637,7 +687,9 @@
 				const li = document.createElement('li');
 			    li.innerHTML = `
 			        <span>${index + 1}</span>
-			        <span>${student}</span>
+					<span>${student}
+				    	<button class="delete-student" onclick="deleteStudent('${student}')" title="Schüler löschen">×</button>
+				    </span>
 			        <span>${rating.mu.toFixed(1)}</span>
 			        <span class="sigma">±${rating.sigma.toFixed(1)}</span>
 			        <span class="drag-handle">⋮⋮</span>
@@ -811,6 +863,30 @@
 		    };
 
 		    reader.readAsText(file); // Datei als Text einlesen
+		}
+		
+		function deleteStudent(studentName) {
+		    if (!confirm(`Möchten Sie ${studentName} wirklich aus der Klasse entfernen?`)) {
+		        return;
+		    }
+
+		    const classData = state.classes[state.currentClass];
+    
+		    // Schüler aus der Liste entfernen
+		    classData.students = classData.students.filter(s => s !== studentName);
+    
+		    // Rating des Schülers entfernen
+		    delete classData.ratings[studentName];
+    
+		    // Vergleiche mit diesem Schüler entfernen
+		    Object.keys(classData.comparisons).forEach(key => {
+		        if (key.includes(studentName)) {
+		            delete classData.comparisons[key];
+		        }
+		    });
+
+		    saveState();
+		    updateUI();
 		}
 
 		
